@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Energia de casa | Painel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/energia.css') }}">
+</head>
+<body>
+<div class="layout">
+    <aside class="rail">
+        <a class="brand" href="#topo"><span class="brand-symbol">ϟ</span><span>casa<span> / energia</span></span></a>
+        <p class="rail-caption">MONITORAMENTO</p>
+        <nav aria-label="Navegacao principal">
+            <a href="#analise" class="rail-link active"><span>▤</span> Análise</a>
+            <a href="#leituras" class="rail-link"><span>＋</span> Leituras</a>
+            <a href="#circuitos" class="rail-link"><span>⌘</span> Circuitos</a>
+            <a href="#configuracoes" class="rail-link"><span>⚙</span> Ajustes</a>
+        </nav>
+        <div class="rail-bottom"><span class="live-dot"></span> Banco local neste computador</div>
+    </aside>
+
+    <main id="topo" class="main">
+        <header class="page-head">
+            <div><p class="kicker">ENERGIA RESIDENCIAL <span>•</span> DADOS LOCAIS</p><h1>Consumo de energia</h1></div>
+            <a class="button button-dark" href="#leituras">＋ Registrar leitura</a>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}<div class="messages">{% for category, message in messages %}<p class="notice notice-{{ category }}">{{ message }}</p>{% endfor %}</div>{% endif %}
+        {% endwith %}
+
+        <section class="headline-metrics" aria-label="Resumo do consumo">
+            <article class="headline-item network-headline">
+                <div class="metric-label"><span class="metric-mark mark-network">⌁</span> Rede geral</div>
+                <strong>{{ analyses.rede.total_kwh|br }} <small>kWh</small></strong>
+                <span class="metric-cost">R$ {{ analyses.rede.total_cost|br }} no período</span>
+            </article>
+            <article class="headline-item circuit-headline">
+                <div class="metric-label"><span class="metric-mark mark-circuit">⌘</span> {{ selected_circuit_name }}</div>
+                <strong>{{ analyses.circuito.total_kwh|br }} <small>kWh</small></strong>
+                <span class="metric-cost">R$ {{ analyses.circuito.total_cost|br }} no período</span>
+            </article>
+            <article class="headline-item tariff-headline">
+                <div class="metric-label"><span class="metric-mark mark-tariff">R$</span> Tarifa aplicada</div>
+                <strong>R$ {{ settings.tarifa|br }} <small>/ kWh</small></strong>
+                <span class="metric-cost">Estimativas calculadas com esta tarifa</span>
+            </article>
+        </section>
+
+        <section id="analise" class="section-block">
+            <div class="section-title"><div><p class="kicker">VISÃO DO PERÍODO</p><h2>Consumo e custo por faixa</h2></div><span class="selection-note">{{ start_day }} até {{ end_day }}</span></div>
+            <form class="filter-bar" method="get" action="/">
+                <label>Período
+                    <select name="periodo" id="periodo">
+                        <option value="7d" {% if period == '7d' %}selected{% endif %}>Últimos 7 dias</option>
+                        <option value="30d" {% if period == '30d' %}selected{% endif %}>Últimos 30 dias</option>
+                        <option value="month" {% if period == 'month' %}selected{% endif %}>Este mês</option>
+                        <option value="custom" {% if period == 'custom' %}selected{% endif %}>Personalizado</option>
+                    </select>
+                </label>
+                <label class="custom-date">De<input type="date" name="inicio" value="{{ start_day }}"></label>
+                <label class="custom-date">Até<input type="date" name="fim" value="{{ end_day }}"></label>
+                <label>Circuito
+                    <select name="circuito">
+                        <option value="">Todos os circuitos</option>
+                        {% for circuit in circuits %}<option value="{{ circuit.id }}" {% if circuit_filter == circuit.id|string %}selected{% endif %}>{{ circuit.name }}</option>{% endfor %}
+                    </select>
+                </label>
+                <button class="button button-dark" type="submit">Aplicar</button>
+                <a class="button button-light" href="/">Limpar</a>
+            </form>
+
+            <div class="analysis-grid">
+                {% for key, title in [('rede', 'Rede geral'), ('circuito', selected_circuit_name)] %}
+                {% set analysis = analyses[key] %}
+                <article class="analysis-panel">
+                    <div class="analysis-heading"><div><span class="source-tag source-{{ key }}">{{ 'MEDIDOR PRINCIPAL' if key == 'rede' else 'SUBMEDIÇÃO' }}</span><h3>{{ title }}</h3></div><div class="panel-total"><strong>{{ analysis.total_kwh|br }} kWh</strong><span>R$ {{ analysis.total_cost|br }}</span></div></div>
+                    <div class="table-scroll"><table>
+                        <thead><tr><th>FAIXA</th><th>MEDIDO / EST.</th><th>CUSTO</th><th>MÉDIA / SEMANA</th><th>MÉDIA / MÊS</th></tr></thead>
+                        <tbody>
+                        {% for period_key, item in analysis.periods.items() %}
+                        <tr><td><span class="period-dot dot-{{ period_key }}"></span>{{ period_labels[period_key] }}</td><td>{{ item.kwh|br }} kWh</td><td>R$ {{ item.cost|br }}</td><td>{{ item.weekly_kwh|br }} kWh<br><small>R$ {{ item.weekly_cost|br }}</small></td><td>{{ item.monthly_kwh|br }} kWh<br><small>R$ {{ item.monthly_cost|br }}</small></td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table></div>
+                    <div class="average-strip"><span>Média diária</span><strong>{{ analysis.daily_kwh|br }} kWh</strong><strong>R$ {{ analysis.daily_cost|br }}</strong><span class="projection-note">Projeção proporcional ao intervalo filtrado</span></div>
+                </article>
+                {% endfor %}
+            </div>
+            <p class="estimate-note"><span>i</span> As faixas horárias são estimadas a partir do perfil configurado. Para cada leitura, o consumo em kWh é distribuído pelo intervalo informado; isso não substitui medições por horário.</p>
+        </section>
+
+        <section id="leituras" class="section-block">
+            <div class="section-title"><div><p class="kicker">ENTRADAS</p><h2>Registrar consumo medido</h2></div><span class="selection-note">{{ readings|length }} leitura(s) no período</span></div>
+            <div class="entry-layout">
+                <form class="form-panel" method="post" action="/leituras">
+                    <div class="panel-intro"><h3>Nova leitura</h3><p>Informe o consumo em kWh acumulado entre início e fim.</p></div>
+                    <label>Origem da medição
+                        <select name="source" id="source-select"><option value="rede">Rede geral</option><option value="circuito">Circuito</option></select>
+                    </label>
+                    <label id="circuit-field" class="hidden">Circuito
+                        <select name="circuit_id" id="circuit-select" {% if not circuits %}disabled{% endif %}>
+                            {% for circuit in circuits %}<option value="{{ circuit.id }}">{{ circuit.name }}</option>{% endfor %}
+                        </select>
+                        {% if not circuits %}<small>Cadastre um circuito antes de registrar essa leitura.</small>{% endif %}
+                    </label>
+                    <div class="form-row"><label>Início<input type="datetime-local" name="start_at" required></label><label>Fim<input type="datetime-local" name="end_at" required></label></div>
+                    <label>Consumo no intervalo (kWh)<input type="number" name="kwh" min="0.0001" step="0.0001" placeholder="Ex.: 12,5" required></label>
+                    <button class="button button-green" type="submit">Salvar leitura</button>
+                </form>
+                <section class="readings-panel">
+                    <div class="panel-intro"><h3>Leituras recentes</h3><p>Registros que cruzam o período selecionado.</p></div>
+                    {% if readings %}<div class="table-scroll"><table><thead><tr><th>ORIGEM</th><th>INTERVALO</th><th>CONSUMO</th><th></th></tr></thead><tbody>
+                    {% for reading in readings %}<tr><td>{{ 'Rede geral' if reading.source == 'rede' else reading.circuit_name }}</td><td>{{ reading.start_at[0:16]|replace('T', ' ') }}<br><small>até {{ reading.end_at[0:16]|replace('T', ' ') }}</small></td><td>{{ reading.kwh|br }} kWh</td><td><form method="post" action="/leituras/{{ reading.id }}/excluir" onsubmit="return confirm('Remover esta leitura?')"><button class="icon-action" type="submit" title="Remover leitura" aria-label="Remover leitura">×</button></form></td></tr>{% endfor %}
+                    </tbody></table></div>{% else %}<div class="empty-state"><span>⌁</span><strong>Nenhuma leitura nesse período</strong><p>Registre o primeiro intervalo para começar a acompanhar.</p></div>{% endif %}
+                </section>
+            </div>
+        </section>
+
+        <section class="admin-grid">
+            <section id="circuitos" class="section-block admin-block">
+                <div class="section-title"><div><p class="kicker">SUBMEDIÇÃO</p><h2>Circuitos</h2></div></div>
+                <form class="inline-create" method="post" action="/circuitos"><label for="circuit-name">Novo circuito</label><input id="circuit-name" name="name" maxlength="60" placeholder="Ex.: Chuveiro" required><button class="button button-dark" type="submit">Adicionar</button></form>
+                <div class="circuit-list">{% for circuit in circuits %}<div class="circuit-row"><form method="post" action="/circuitos/{{ circuit.id }}/editar"><input name="name" value="{{ circuit.name }}" maxlength="60" aria-label="Nome do circuito" required><button class="text-action" type="submit">Salvar nome</button></form><form method="post" action="/circuitos/{{ circuit.id }}/excluir" onsubmit="return confirm('Remover este circuito?')"><button class="icon-action" type="submit" aria-label="Remover circuito" title="Remover circuito">×</button></form></div>{% else %}<p class="empty-copy">Nenhum circuito cadastrado.</p>{% endfor %}</div>
+            </section>
+
+            <section id="configuracoes" class="section-block admin-block">
+                <div class="section-title"><div><p class="kicker">CÁLCULO</p><h2>Tarifa e perfil horário</h2></div></div>
+                <form class="settings-form" method="post" action="/configuracoes">
+                    <label>Tarifa (R$/kWh)<input type="number" name="tarifa" min="0.0001" step="0.0001" value="{{ settings.tarifa }}" required></label>
+                    <div class="profile-fields"><label>Manhã · 06–12h (%)<input type="number" name="manha" min="0" max="100" value="{{ settings.manha }}" required></label><label>Tarde · 12–18h (%)<input type="number" name="tarde" min="0" max="100" value="{{ settings.tarde }}" required></label><label>Noite · 18–06h (%)<input type="number" name="noite" min="0" max="100" value="{{ settings.noite }}" required></label></div>
+                    <p class="settings-help">As três faixas devem somar 100%. Perfil inicial: 20% manhã, 30% tarde e 50% noite.</p>
+                    <button class="button button-green" type="submit">Salvar ajustes</button>
+                </form>
+            </section>
+        </section>
+        <footer class="footer"><span class="live-dot"></span> Armazenamento local · SQLite</footer>
+    </main>
+</div>
+<script>
+    const sourceSelect = document.querySelector('#source-select');
+    const circuitField = document.querySelector('#circuit-field');
+    const circuitSelect = document.querySelector('#circuit-select');
+    const periodSelect = document.querySelector('#periodo');
+    const customDates = document.querySelectorAll('.custom-date');
+    function syncSource() {
+        const usesCircuit = sourceSelect.value === 'circuito';
+        circuitField.classList.toggle('hidden', !usesCircuit);
+        if (circuitSelect) circuitSelect.required = usesCircuit;
+    }
+    function syncPeriod() {
+        customDates.forEach((field) => field.classList.toggle('hidden', periodSelect.value !== 'custom'));
+    }
+    sourceSelect.addEventListener('change', syncSource);
+    periodSelect.addEventListener('change', syncPeriod);
+    syncSource();
+    syncPeriod();
+</script>
+</body>
+</html>
